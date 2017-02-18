@@ -1,0 +1,103 @@
+1.安装centos7操作系统。
+2.安装docker
+  yum install docker-io
+  或者使用安装包安装。
+  rpm -ivh docker-selinux-1.7.1-115.el7.x86_64.rpm
+  rpm -ivh docker-1.7.1-115.el7.x86_64.rpm
+3.从svn上取得tools下的几个镜像，并导入docker
+  docker load --input=ci-build.tar
+  docker load --input=node.tar
+  docker load --input=mongodb.tar
+4.修改docker配置文件：/etc/sysconfig/docker
+  # Modify these options if you want to change the way the docker daemon runs
+  #OPTIONS='--selinux-enabled'
+  OPTIONS='-H tcp://0.0.0.0:4243 -H unix://var/run/docker.sock'
+5.重启docker服务：
+  systemctl restart docker
+  systemctl enable docker
+6.设置自定义服务：
+  1>在/usr/lib/systemd/system/下创建docker_start.service文件，添加以下内容：
+  [Unit]
+  Description= docker start node mongodb jenkins
+  After=docker.service docker.socket
+
+  [Service]
+  Type=forking
+  ExecStart=/home/xinwei/code/xwcloudtest/docker_start.sh
+  PrivateTmp=true
+
+  [Install]
+  WantedBy=multi-user.target
+  2>检查服务状态：systemctl status docker_start
+  3>启用服务：systemctl enable docker_start
+  4>启动服务：systemctl start docker_start
+7.启动docker容器：
+  1>启动服务会报错，这里需要修改目录。
+    mkdir  /home/xinwei/mongodb_file
+  2>修改docker_start.sh文件中的
+  docker run -d -v /home/guow/mongodb_file:/data/db -p 27017:27017 mongodb mongod
+  docker run -d -v /home/xinwei/mongodb_file:/data/db -p 27017:27017 mongodb mongod
+8.关闭防火墙并重启：
+  systemctl stop firewalld.service
+  systemctl disable firewalld.service
+  reboot
+9.启动vsftpd服务器：
+  1>备份原始配置：
+    cd /etc
+    mv vsftpd vsftpd.bak
+  2>创建ftp用户：
+    adduser xwcloudtest --home-dir /home/xwcloudtest --create-home
+    passwd xwcloudtest
+  3>创建日志目录：
+    cd /home/xwcloudtest
+    mkdir logs
+  4>解压tools下的配置文件打包：
+    cd /etc
+    tar -xzvf vsftpd.conf.tar.gz 
+  5>设置selinux：
+    getsebool -a|grep ftp
+    setsebool -P ftp_home_dir=1
+    setsebool -P allow_ftpd_full_access 1
+    setsebool -P allow_ftpd_use_cifs 1
+  6>启动vsftpd服务:
+    systemctl start vsftpd
+10.编译，安装node，redis：
+  tar -xzvf node-v0.12.7.tar.gz
+  cd node-v0.12.7
+  ./configure
+  make ; make install
+
+  tar -xzvf redis-3.0.4.tar.gz
+  cd redis-3.0.4
+  make ; make install
+11.启动redis：
+   redis-server redis.conf
+12.启动logstash：
+   解压logstash：
+   tar -xzvf logstash-1.5.4.tar.gz
+   启动logstash：
+   cd /home/xinwei/tools/logstash/logstash-1.5.4
+   nohup bin/logstash -f logstash.conf &
+13.修改配置，启动web server容器：
+   docker run -d -v /home/xinwei/code/xwcloudtest/:/home/guow -v /home/xwcloudtest/:/home/xwcloudtest/ -p 8000:8000 node /home/guow/start.sh
+14.安装pipework
+   unzip pipework-master.zip
+   cp pipework/pipework /usr/local/bin/
+15.修改配置，启动master与slave：
+   npm start master
+   npm start slave
+16.创建bridge0：
+   修改create_bridge0.sh脚本，并执行该脚本。
+
+
+17.真实环境部署方法：
+   1>限制：
+     真实环境小区物理id由enb id生成，小区物理id在相邻小区之间不能重复。配置时需要注意。
+
+18.多UE控制软件：
+   1>使用master所在ip或域名修改slave_ue.cfg的配置之后，使用python Slave_UE启动多UE控制软件即可。
+
+常见问题：
+1.修改过模拟核心网地址之后需要执行：/usr/xinwei/wireless/im5000下的config.sh脚本重新填写ip地址。
+2.多UE控制所在pdn的ip必须为192.168.1.204。
+3.重启pdn之后必须在pdn上添加从pdn到ue之间的路由。
